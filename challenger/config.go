@@ -5,12 +5,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/refcell/malleable/flags"
 	"github.com/urfave/cli"
 
-	"github.com/ethereum-optimism/optimism/op-node/sources"
-	// flags "github.com/refcell/op-challenger/flags"
+	flags "github.com/refcell/op-challenger/flags"
 
+	sources "github.com/ethereum-optimism/optimism/op-node/sources"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
