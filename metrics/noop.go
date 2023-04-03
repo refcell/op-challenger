@@ -3,7 +3,7 @@ package metrics
 import (
 	eth "github.com/ethereum-optimism/optimism/op-node/eth"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
-	txmetrics "github.com/ethereum-optimism/optimism/op-service/txmgr/metrics"
+	txmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 )
 
 type noopMetrics struct {

@@ -3,15 +3,16 @@ package metrics
 import (
 	"context"
 
-	eth "github.com/ethereum-optimism/optimism/op-node/eth"
+	// eth "github.com/ethereum-optimism/optimism/op-node/eth"
 
 	common "github.com/ethereum/go-ethereum/common"
 	ethclient "github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/ethereum/go-ethereum/log"
 	prometheus "github.com/prometheus/client_golang/prometheus"
 
+	eth "github.com/ethereum-optimism/optimism/op-node/eth"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
-	txmetrics "github.com/ethereum-optimism/optimism/op-service/txmgr/metrics"
+	txmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 )
 
 const Namespace = "op_challenger"

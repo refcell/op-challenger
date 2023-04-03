@@ -12,27 +12,27 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/urfave/cli"
+	abi "github.com/ethereum/go-ethereum/accounts/abi"
+	bind "github.com/ethereum/go-ethereum/accounts/abi/bind"
+	common "github.com/ethereum/go-ethereum/common"
+	log "github.com/ethereum/go-ethereum/log"
+	cli "github.com/urfave/cli"
 
 	metrics "github.com/refcell/op-challenger/metrics"
 
-	"github.com/ethereum-optimism/optimism/op-bindings/bindings"
-	"github.com/ethereum-optimism/optimism/op-node/eth"
-	"github.com/ethereum-optimism/optimism/op-node/sources"
+	bindings "github.com/ethereum-optimism/optimism/op-bindings/bindings"
+	eth "github.com/ethereum-optimism/optimism/op-node/eth"
+	sources "github.com/ethereum-optimism/optimism/op-node/sources"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
 	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
-	"github.com/ethereum-optimism/optimism/op-service/txmgr"
+	txmgr "github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
 var supportedL2OutputVersion = eth.Bytes32{}
 
-// Main is the entrypoint into the L2 Output Submitter. This method executes the
-// service and blocks until the service exits.
+// Main is the entrypoint into the Challenger.
+// This executes and blocks until the service exits.
 func Main(version string, cliCtx *cli.Context) error {
 	cfg := NewConfig(cliCtx)
 	if err := cfg.Check(); err != nil {
@@ -41,30 +41,30 @@ func Main(version string, cliCtx *cli.Context) error {
 
 	l := oplog.NewLogger(cfg.LogConfig)
 	m := metrics.NewMetrics("default")
-	l.Info("Initializing L2 Output Submitter")
+	l.Info("Initializing Challenger")
 
-	proposerConfig, err := NewL2OutputSubmitterConfigFromCLIConfig(cfg, l, m)
+	proposerConfig, err := NewChallengerConfigFromCLIConfig(cfg, l, m)
 	if err != nil {
-		l.Error("Unable to create the L2 Output Submitter", "error", err)
+		l.Error("Unable to create the Challenger", "error", err)
 		return err
 	}
 
-	l2OutputSubmitter, err := NewL2OutputSubmitter(*proposerConfig, l, m)
+	l2OutputSubmitter, err := NewChallenger(*proposerConfig, l, m)
 	if err != nil {
-		l.Error("Unable to create the L2 Output Submitter", "error", err)
+		l.Error("Unable to create the Challenger", "error", err)
 		return err
 	}
 
-	l.Info("Starting L2 Output Submitter")
+	l.Info("Starting Challenger")
 	ctx, cancel := context.WithCancel(context.Background())
 	if err := l2OutputSubmitter.Start(); err != nil {
 		cancel()
-		l.Error("Unable to start L2 Output Submitter", "error", err)
+		l.Error("Unable to start Challenger", "error", err)
 		return err
 	}
 	defer l2OutputSubmitter.Stop()
 
-	l.Info("L2 Output Submitter started")
+	l.Info("Challenger started")
 	pprofConfig := cfg.PprofConfig
 	if pprofConfig.Enabled {
 		l.Info("starting pprof", "addr", pprofConfig.ListenAddr, "port", pprofConfig.ListenPort)
@@ -109,8 +109,8 @@ func Main(version string, cliCtx *cli.Context) error {
 	return nil
 }
 
-// L2OutputSubmitter is responsible for proposing outputs
-type L2OutputSubmitter struct {
+// Challenger is responsible for disputing L2OutputOracle outputs
+type Challenger struct {
 	txMgr txmgr.TxManager
 	wg    sync.WaitGroup
 	done  chan struct{}
@@ -127,28 +127,36 @@ type L2OutputSubmitter struct {
 	l2ooContractAddr common.Address
 	l2ooABI          *abi.ABI
 
+	dgfContract     *bindings.L2OutputOracleCaller
+	dgfContractAddr common.Address
+	dgfABI          *abi.ABI
+
 	// AllowNonFinalized enables the proposal of safe, but non-finalized L2 blocks.
 	// The L1 block-hash embedded in the proposal TX is checked and should ensure the proposal
 	// is never valid on an alternative L1 chain that would produce different L2 data.
 	// This option is not necessary when higher proposal latency is acceptable and L1 is healthy.
 	allowNonFinalized bool
 	// How frequently to poll L2 for new finalized outputs
-	pollInterval   time.Duration
 	networkTimeout time.Duration
 }
 
-// NewL2OutputSubmitterFromCLIConfig creates a new L2 Output Submitter given the CLI Config
-func NewL2OutputSubmitterFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Metricer) (*L2OutputSubmitter, error) {
-	proposerConfig, err := NewL2OutputSubmitterConfigFromCLIConfig(cfg, l, m)
+// NewChallengerFromCLIConfig creates a new L2 Output Submitter given the CLI Config
+func NewChallengerFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Metricer) (*Challenger, error) {
+	proposerConfig, err := NewChallengerConfigFromCLIConfig(cfg, l, m)
 	if err != nil {
 		return nil, err
 	}
-	return NewL2OutputSubmitter(*proposerConfig, l, m)
+	return NewChallenger(*proposerConfig, l, m)
 }
 
-// NewL2OutputSubmitterConfigFromCLIConfig creates the proposer config from the CLI config.
-func NewL2OutputSubmitterConfigFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Metricer) (*Config, error) {
+// NewChallengerConfigFromCLIConfig creates the proposer config from the CLI config.
+func NewChallengerConfigFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Metricer) (*Config, error) {
 	l2ooAddress, err := parseAddress(cfg.L2OOAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	dgfAddress, err := parseAddress(cfg.DGFAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +165,7 @@ func NewL2OutputSubmitterConfigFromCLIConfig(cfg CLIConfig, l log.Logger, m metr
 	if err != nil {
 		return nil, err
 	}
-	txManager := txmgr.NewSimpleTxManager("proposer", l, m, txManagerConfig)
+	txManager := txmgr.NewSimpleTxManager("challenger", l, m, txManagerConfig)
 
 	// Connect to L1 and L2 providers. Perform these last since they are the most expensive.
 	ctx := context.Background()
@@ -173,7 +181,7 @@ func NewL2OutputSubmitterConfigFromCLIConfig(cfg CLIConfig, l log.Logger, m metr
 
 	return &Config{
 		L2OutputOracleAddr: l2ooAddress,
-		PollInterval:       cfg.PollInterval,
+		DisputeGameFactory: dgfAddress,
 		NetworkTimeout:     txManagerConfig.NetworkTimeout,
 		L1Client:           l1Client,
 		RollupClient:       rollupClient,
@@ -183,8 +191,8 @@ func NewL2OutputSubmitterConfigFromCLIConfig(cfg CLIConfig, l log.Logger, m metr
 
 }
 
-// NewL2OutputSubmitter creates a new L2 Output Submitter
-func NewL2OutputSubmitter(cfg Config, l log.Logger, m metrics.Metricer) (*L2OutputSubmitter, error) {
+// NewChallenger creates a new L2 Output Submitter
+func NewChallenger(cfg Config, l log.Logger, m metrics.Metricer) (*Challenger, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	l2ooContract, err := bindings.NewL2OutputOracleCaller(cfg.L2OutputOracleAddr, cfg.L1Client)
@@ -208,7 +216,7 @@ func NewL2OutputSubmitter(cfg Config, l log.Logger, m metrics.Metricer) (*L2Outp
 		return nil, err
 	}
 
-	return &L2OutputSubmitter{
+	return &Challenger{
 		txMgr:  cfg.TxManager,
 		done:   make(chan struct{}),
 		log:    l,
@@ -222,19 +230,22 @@ func NewL2OutputSubmitter(cfg Config, l log.Logger, m metrics.Metricer) (*L2Outp
 		l2ooContractAddr: cfg.L2OutputOracleAddr,
 		l2ooABI:          parsed,
 
+		dgfContract:     nil,
+		dgfContractAddr: cfg.DisputeGameFactory,
+		dgfABI:          nil,
+
 		allowNonFinalized: cfg.AllowNonFinalized,
-		pollInterval:      cfg.PollInterval,
 		networkTimeout:    cfg.NetworkTimeout,
 	}, nil
 }
 
-func (l *L2OutputSubmitter) Start() error {
+func (l *Challenger) Start() error {
 	l.wg.Add(1)
 	go l.loop()
 	return nil
 }
 
-func (l *L2OutputSubmitter) Stop() {
+func (l *Challenger) Stop() {
 	l.cancel()
 	close(l.done)
 	l.wg.Wait()
@@ -242,7 +253,7 @@ func (l *L2OutputSubmitter) Stop() {
 
 // FetchNextOutputInfo gets the block number of the next proposal.
 // It returns: the next block number, if the proposal should be made, error
-func (l *L2OutputSubmitter) FetchNextOutputInfo(ctx context.Context) (*eth.OutputResponse, bool, error) {
+func (l *Challenger) FetchNextOutputInfo(ctx context.Context) (*eth.OutputResponse, bool, error) {
 	cCtx, cancel := context.WithTimeout(ctx, l.networkTimeout)
 	defer cancel()
 	callOpts := &bind.CallOpts{
@@ -278,7 +289,7 @@ func (l *L2OutputSubmitter) FetchNextOutputInfo(ctx context.Context) (*eth.Outpu
 	return l.fetchOuput(ctx, nextCheckpointBlock)
 }
 
-func (l *L2OutputSubmitter) fetchOuput(ctx context.Context, block *big.Int) (*eth.OutputResponse, bool, error) {
+func (l *Challenger) fetchOuput(ctx context.Context, block *big.Int) (*eth.OutputResponse, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, l.networkTimeout)
 	defer cancel()
 	output, err := l.rollupClient.OutputAtBlock(ctx, block.Uint64())
@@ -308,7 +319,7 @@ func (l *L2OutputSubmitter) fetchOuput(ctx context.Context, block *big.Int) (*et
 }
 
 // ProposeL2OutputTxData creates the transaction data for the ProposeL2Output function
-func (l *L2OutputSubmitter) ProposeL2OutputTxData(output *eth.OutputResponse) ([]byte, error) {
+func (l *Challenger) ProposeL2OutputTxData(output *eth.OutputResponse) ([]byte, error) {
 	return proposeL2OutputTxData(l.l2ooABI, output)
 }
 
@@ -323,7 +334,7 @@ func proposeL2OutputTxData(abi *abi.ABI, output *eth.OutputResponse) ([]byte, er
 }
 
 // sendTransaction creates & sends transactions through the underlying transaction manager.
-func (l *L2OutputSubmitter) sendTransaction(ctx context.Context, output *eth.OutputResponse) error {
+func (l *Challenger) sendTransaction(ctx context.Context, output *eth.OutputResponse) error {
 	data, err := l.ProposeL2OutputTxData(output)
 	if err != nil {
 		return err
@@ -342,7 +353,7 @@ func (l *L2OutputSubmitter) sendTransaction(ctx context.Context, output *eth.Out
 }
 
 // loop is responsible for creating & submitting the next outputs
-func (l *L2OutputSubmitter) loop() {
+func (l *Challenger) loop() {
 	defer l.wg.Done()
 
 	ctx := l.ctx
