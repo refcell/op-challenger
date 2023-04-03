@@ -12,15 +12,18 @@ import (
 	"syscall"
 	"time"
 
+	goEth "github.com/ethereum/go-ethereum"
 	abi "github.com/ethereum/go-ethereum/accounts/abi"
 	bind "github.com/ethereum/go-ethereum/accounts/abi/bind"
 	common "github.com/ethereum/go-ethereum/common"
+	goTypes "github.com/ethereum/go-ethereum/core/types"
 	log "github.com/ethereum/go-ethereum/log"
 	cli "github.com/urfave/cli"
 
+	bindings "github.com/refcell/op-challenger/contracts/bindings"
 	metrics "github.com/refcell/op-challenger/metrics"
 
-	bindings "github.com/ethereum-optimism/optimism/op-bindings/bindings"
+	opBindings "github.com/ethereum-optimism/optimism/op-bindings/bindings"
 	eth "github.com/ethereum-optimism/optimism/op-node/eth"
 	sources "github.com/ethereum-optimism/optimism/op-node/sources"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
@@ -49,7 +52,7 @@ func Main(version string, cliCtx *cli.Context) error {
 		return err
 	}
 
-	l2OutputSubmitter, err := NewChallenger(*proposerConfig, l, m)
+	challenger, err := NewChallenger(*proposerConfig, l, m)
 	if err != nil {
 		l.Error("Unable to create the Challenger", "error", err)
 		return err
@@ -57,12 +60,12 @@ func Main(version string, cliCtx *cli.Context) error {
 
 	l.Info("Starting Challenger")
 	ctx, cancel := context.WithCancel(context.Background())
-	if err := l2OutputSubmitter.Start(); err != nil {
+	if err := challenger.Start(); err != nil {
 		cancel()
 		l.Error("Unable to start Challenger", "error", err)
 		return err
 	}
-	defer l2OutputSubmitter.Stop()
+	defer challenger.Stop()
 
 	l.Info("Challenger started")
 	pprofConfig := cfg.PprofConfig
@@ -123,11 +126,11 @@ type Challenger struct {
 	// RollupClient is used to retrieve output roots from
 	rollupClient *sources.RollupClient
 
-	l2ooContract     *bindings.L2OutputOracleCaller
+	l2ooContract     *opBindings.L2OutputOracleCaller
 	l2ooContractAddr common.Address
 	l2ooABI          *abi.ABI
 
-	dgfContract     *bindings.L2OutputOracleCaller
+	dgfContract     *bindings.MockDisputeGameFactoryCaller
 	dgfContractAddr common.Address
 	dgfABI          *abi.ABI
 
@@ -191,11 +194,11 @@ func NewChallengerConfigFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Met
 
 }
 
-// NewChallenger creates a new L2 Output Submitter
+// NewChallenger creates a new Challenger
 func NewChallenger(cfg Config, l log.Logger, m metrics.Metricer) (*Challenger, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	l2ooContract, err := bindings.NewL2OutputOracleCaller(cfg.L2OutputOracleAddr, cfg.L1Client)
+	l2ooContract, err := opBindings.NewL2OutputOracleCaller(cfg.L2OutputOracleAddr, cfg.L1Client)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -210,11 +213,35 @@ func NewChallenger(cfg Config, l log.Logger, m metrics.Metricer) (*Challenger, e
 	}
 	log.Info("Connected to L2OutputOracle", "address", cfg.L2OutputOracleAddr, "version", version)
 
-	parsed, err := bindings.L2OutputOracleMetaData.GetAbi()
+	parsed, err := opBindings.L2OutputOracleMetaData.GetAbi()
 	if err != nil {
 		cancel()
 		return nil, err
 	}
+
+	dgfContract, err := bindings.NewMockDisputeGameFactoryCaller(cfg.DisputeGameFactory, cfg.L1Client)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	dgfAbi, err := bindings.MockDisputeGameFactoryMetaData.GetAbi()
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	// adgContract, err := bindings.NewMockAttestationDisputeGameCaller(cfg.DisputeGameFactory, cfg.L1Client)
+	// if err != nil {
+	// 	cancel()
+	// 	return nil, err
+	// }
+
+	// adgAbi, err := bindings.MockAttestationDisputeGameMetaData.GetAbi()
+	// if err != nil {
+	// 	cancel()
+	// 	return nil, err
+	// }
 
 	return &Challenger{
 		txMgr:  cfg.TxManager,
@@ -230,9 +257,9 @@ func NewChallenger(cfg Config, l log.Logger, m metrics.Metricer) (*Challenger, e
 		l2ooContractAddr: cfg.L2OutputOracleAddr,
 		l2ooABI:          parsed,
 
-		dgfContract:     nil,
+		dgfContract:     dgfContract,
 		dgfContractAddr: cfg.DisputeGameFactory,
-		dgfABI:          nil,
+		dgfABI:          dgfAbi,
 
 		allowNonFinalized: cfg.AllowNonFinalized,
 		networkTimeout:    cfg.NetworkTimeout,
@@ -251,72 +278,28 @@ func (l *Challenger) Stop() {
 	l.wg.Wait()
 }
 
-// FetchNextOutputInfo gets the block number of the next proposal.
-// It returns: the next block number, if the proposal should be made, error
-func (l *Challenger) FetchNextOutputInfo(ctx context.Context) (*eth.OutputResponse, bool, error) {
-	cCtx, cancel := context.WithTimeout(ctx, l.networkTimeout)
-	defer cancel()
-	callOpts := &bind.CallOpts{
-		From:    l.txMgr.From(),
-		Context: cCtx,
-	}
-	nextCheckpointBlock, err := l.l2ooContract.NextBlockNumber(callOpts)
-	if err != nil {
-		l.log.Error("proposer unable to get next block number", "err", err)
-		return nil, false, err
-	}
-	// Fetch the current L2 heads
-	cCtx, cancel = context.WithTimeout(ctx, l.networkTimeout)
-	defer cancel()
-	status, err := l.rollupClient.SyncStatus(cCtx)
-	if err != nil {
-		l.log.Error("proposer unable to get sync status", "err", err)
-		return nil, false, err
-	}
-	// Use either the finalized or safe head depending on the config. Finalized head is default & safer.
-	var currentBlockNumber *big.Int
-	if l.allowNonFinalized {
-		currentBlockNumber = new(big.Int).SetUint64(status.SafeL2.Number)
-	} else {
-		currentBlockNumber = new(big.Int).SetUint64(status.FinalizedL2.Number)
-	}
-	// Ensure that we do not submit a block in the future
-	if currentBlockNumber.Cmp(nextCheckpointBlock) < 0 {
-		l.log.Info("proposer submission interval has not elapsed", "currentBlockNumber", currentBlockNumber, "nextBlockNumber", nextCheckpointBlock)
-		return nil, false, nil
-	}
-
-	return l.fetchOuput(ctx, nextCheckpointBlock)
-}
-
-func (l *Challenger) fetchOuput(ctx context.Context, block *big.Int) (*eth.OutputResponse, bool, error) {
+// ValidateOutput checks that a given output is expected via a trusted rollup node rpc.
+// It returns: if the output is correct, error
+func (l *Challenger) ValidateOutput(ctx context.Context, l2BlockNumber *big.Int, expected Bytes32) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, l.networkTimeout)
 	defer cancel()
-	output, err := l.rollupClient.OutputAtBlock(ctx, block.Uint64())
+	output, err := l.rollupClient.OutputAtBlock(ctx, l2BlockNumber.Uint64())
 	if err != nil {
 		l.log.Error("failed to fetch output at block %d: %w", block, err)
-		return nil, false, err
+		return true, err
 	}
 	if output.Version != supportedL2OutputVersion {
 		l.log.Error("unsupported l2 output version: %s", output.Version)
-		return nil, false, errors.New("unsupported l2 output version")
+		return true, errors.New("unsupported l2 output version")
 	}
-	if output.BlockRef.Number != block.Uint64() { // sanity check, e.g. in case of bad RPC caching
-		l.log.Error("invalid blockNumber: next blockNumber is %v, blockNumber of block is %v", block, output.BlockRef.Number)
-		return nil, false, errors.New("invalid blockNumber")
+	// If the block numbers don't match, we should try to fetch the output again
+	if output.BlockRef.Number != l2BlockNumber.Uint64() {
+		l.log.Error("invalid blockNumber: next blockNumber is %v, blockNumber of block is %v", l2BlockNumber, output.BlockRef.Number)
+		return true, errors.New("invalid blockNumber")
 	}
-
-	// Always propose if it's part of the Finalized L2 chain. Or if allowed, if it's part of the safe L2 chain.
-	if !(output.BlockRef.Number <= output.Status.FinalizedL2.Number || (l.allowNonFinalized && output.BlockRef.Number <= output.Status.SafeL2.Number)) {
-		l.log.Debug("not proposing yet, L2 block is not ready for proposal",
-			"l2_proposal", output.BlockRef,
-			"l2_safe", output.Status.SafeL2,
-			"l2_finalized", output.Status.FinalizedL2,
-			"allow_non_finalized", l.allowNonFinalized)
-		return nil, false, nil
-	}
-	return output, true, nil
+	return output.OutputRoot != expected, nil
 }
+
 
 // ProposeL2OutputTxData creates the transaction data for the ProposeL2Output function
 func (l *Challenger) ProposeL2OutputTxData(output *eth.OutputResponse) ([]byte, error) {
@@ -358,30 +341,54 @@ func (l *Challenger) loop() {
 
 	ctx := l.ctx
 
-	ticker := time.NewTicker(l.pollInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			output, shouldPropose, err := l.FetchNextOutputInfo(ctx)
+	// Listen for `OutputProposed` events from the L2 Output Oracle contract
+	event := l.l2ooABI.Events["OutputProposed"]
+	query := goEth.FilterQuery{
+		Topics: [][]common.Hash{
+			{event.ID},
+		},
+	}
+
+	logs := make(chan goTypes.Log)
+    sub, err := l. .SubscribeFilterLogs(context.Background(), query, logs)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    for {
+        select {
+        case err := <-sub.Err():
+            log.Fatal(err)
+        case vLog := <-logs:
+            fmt.Println(vLog) // pointer to event log
+			/*
+				Event is encoded as:
+					bytes32 indexed outputRoot,
+					uint256 indexed l2OutputIndex,
+					uint256 indexed l2BlockNumber,
+					uint256 l1Timestamp
+			*/
+			l2BlockNumber := vLog.Topics[3]
+			expected := vLog.Topics[1]
+			isValid, err := l.ValidateOutput(ctx, l2BlockNumber, expected)
 			if err != nil {
 				break
 			}
-			if !shouldPropose {
+			// If the output is valid, we don't challenge
+			if isValid {
+				l.metr.RecordValidOutput(l2BlockNumber)
 				break
 			}
 
-			cCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-			if err := l.sendTransaction(cCtx, output); err != nil {
-				l.log.Error("Failed to send proposal transaction", "err", err)
-				cancel()
-				break
-			}
-			l.metr.RecordL2BlocksProposed(output.BlockRef)
-			cancel()
-
-		case <-l.done:
-			return
-		}
-	}
+			// TODO: Submit a challenge
+			// cCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			// if err := l.sendTransaction(cCtx, output); err != nil {
+			// 	l.log.Error("Failed to send proposal transaction", "err", err)
+			// 	cancel()
+			// 	break
+			// }
+			// l.metr.RecordL2BlocksProposed(output.BlockRef)
+			// cancel()
+        }
+    }
 }
