@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"math/big"
 
 	common "github.com/ethereum/go-ethereum/common"
 	types "github.com/ethereum/go-ethereum/core/types"
@@ -25,6 +26,7 @@ type Metricer interface {
 
 	RecordValidOutput(l2ref eth.L2BlockRef)
 	RecordInvalidOutput(l2ref eth.L2BlockRef)
+	RecordChallengeSent(l2BlockNumber *big.Int, outputRoot common.Hash)
 
 	RecordL1GasFee(receipt *types.Receipt)
 }
@@ -104,8 +106,9 @@ func (m *Metrics) RecordUp() {
 }
 
 const (
-	ValidOutput   = "valid_output"
-	InvalidOutput = "invalid_output"
+	ValidOutput      = "valid_output"
+	InvalidOutput    = "invalid_output"
+	OutputChallenged = "output_challenged"
 )
 
 // RecordValidOutput should be called when a valid output is found
@@ -116,6 +119,13 @@ func (m *Metrics) RecordValidOutput(l2ref eth.L2BlockRef) {
 // RecordInvalidOutput should be called when an invalid output is found
 func (m *Metrics) RecordInvalidOutput(l2ref eth.L2BlockRef) {
 	m.RecordL2Ref(InvalidOutput, l2ref)
+}
+
+func (m *Metrics) RecordChallengeSent(l2BlockNumber *big.Int, outputRoot common.Hash) {
+	m.RecordL2Ref(OutputChallenged, eth.L2BlockRef{
+		Number: l2BlockNumber.Uint64(),
+		Hash:   outputRoot,
+	})
 }
 
 // RecordL1GasFee records the L1 gas fee for a transaction

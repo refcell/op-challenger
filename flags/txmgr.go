@@ -61,11 +61,11 @@ func TxManagerCLIFlags(envPrefix string) []cli.Flag {
 		},
 		SequencerHDPathFlag,
 		L2OutputHDPathFlag,
-		cli.StringFlag{
-			Name:   "private-key",
-			Usage:  "The private key to use with the service. Must not be used with mnemonic.",
-			EnvVar: opservice.PrefixEnvVar(envPrefix, "PRIVATE_KEY"),
-		},
+		// cli.StringFlag{
+		// 	Name:   "private-key",
+		// 	Usage:  "The private key to use with the service. Must not be used with mnemonic.",
+		// 	EnvVar: opservice.PrefixEnvVar(envPrefix, "PRIVATE_KEY"),
+		// },
 		cli.Uint64Flag{
 			Name:   NumConfirmationsFlagName,
 			Usage:  "Number of confirmations which we will wait after sending a transaction",

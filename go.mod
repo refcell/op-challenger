@@ -2,7 +2,7 @@ module github.com/refcell/op-challenger
 
 go 1.20
 
-replace github.com/ethereum/go-ethereum v1.11.5 => github.com/ethereum-optimism/op-geth v1.11.2-de8c5df46.0.20230324105532-555b76f39878
+replace github.com/ethereum/go-ethereum v1.11.4 => github.com/ethereum-optimism/op-geth v1.11.2-de8c5df46.0.20230324105532-555b76f39878
 
 require (
 	github.com/ethereum-optimism/optimism v1.0.1

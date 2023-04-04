@@ -139,6 +139,8 @@ type Challenger struct {
 	dgfContractAddr common.Address
 	dgfABI          *abi.ABI
 
+	adgABI *abi.ABI
+
 	networkTimeout time.Duration
 }
 
@@ -229,17 +231,11 @@ func NewChallenger(cfg Config, l log.Logger, m metrics.Metricer) (*Challenger, e
 		return nil, err
 	}
 
-	// adgContract, err := bindings.NewMockAttestationDisputeGameCaller(cfg.DisputeGameFactory, cfg.L1Client)
-	// if err != nil {
-	// 	cancel()
-	// 	return nil, err
-	// }
-
-	// adgAbi, err := bindings.MockAttestationDisputeGameMetaData.GetAbi()
-	// if err != nil {
-	// 	cancel()
-	// 	return nil, err
-	// }
+	adgAbi, err := bindings.MockAttestationDisputeGameMetaData.GetAbi()
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 
 	return &Challenger{
 		txMgr:  cfg.TxManager,
@@ -263,75 +259,77 @@ func NewChallenger(cfg Config, l log.Logger, m metrics.Metricer) (*Challenger, e
 		dgfContractAddr: cfg.DisputeGameFactory,
 		dgfABI:          dgfAbi,
 
+		adgABI: adgAbi,
+
 		networkTimeout: cfg.NetworkTimeout,
 	}, nil
 }
 
-func (l *Challenger) Start() error {
-	l.wg.Add(1)
-	go l.loop()
+func (c *Challenger) Start() error {
+	c.wg.Add(1)
+	go c.loop()
 	return nil
 }
 
-func (l *Challenger) Stop() {
-	l.cancel()
-	close(l.done)
-	l.wg.Wait()
+func (c *Challenger) Stop() {
+	c.cancel()
+	close(c.done)
+	c.wg.Wait()
 }
 
 // ValidateOutput checks that a given output is expected via a trusted rollup node rpc.
 // It returns: if the output is correct, error
-func (l *Challenger) ValidateOutput(ctx context.Context, l2BlockNumber *big.Int, expected eth.Bytes32) (bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, l.networkTimeout)
+func (c *Challenger) ValidateOutput(ctx context.Context, l2BlockNumber *big.Int, expected eth.Bytes32) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.networkTimeout)
 	defer cancel()
-	output, err := l.rollupClient.OutputAtBlock(ctx, l2BlockNumber.Uint64())
+	output, err := c.rollupClient.OutputAtBlock(ctx, l2BlockNumber.Uint64())
 	if err != nil {
-		l.log.Error("failed to fetch output for l2BlockNumber %d: %w", l2BlockNumber, err)
+		c.log.Error("failed to fetch output for l2BlockNumber %d: %w", l2BlockNumber, err)
 		return true, err
 	}
 	if output.Version != supportedL2OutputVersion {
-		l.log.Error("unsupported l2 output version: %s", output.Version)
+		c.log.Error("unsupported l2 output version: %s", output.Version)
 		return true, errors.New("unsupported l2 output version")
 	}
 	// If the block numbers don't match, we should try to fetch the output again
 	if output.BlockRef.Number != l2BlockNumber.Uint64() {
-		l.log.Error("invalid blockNumber: next blockNumber is %v, blockNumber of block is %v", l2BlockNumber, output.BlockRef.Number)
+		c.log.Error("invalid blockNumber: next blockNumber is %v, blockNumber of block is %v", l2BlockNumber, output.BlockRef.Number)
 		return true, errors.New("invalid blockNumber")
+	}
+	if output.OutputRoot == expected {
+		c.metr.RecordValidOutput(output.BlockRef)
 	}
 	return output.OutputRoot != expected, nil
 }
 
-// ProposeL2OutputTxData creates the transaction data for the ProposeL2Output function
-func (l *Challenger) ProposeL2OutputTxData(output *eth.OutputResponse) ([]byte, error) {
-	return proposeL2OutputTxData(l.l2ooABI, output)
-}
-
-// proposeL2OutputTxData creates the transaction data for the ProposeL2Output function
-func proposeL2OutputTxData(abi *abi.ABI, output *eth.OutputResponse) ([]byte, error) {
-	return abi.Pack(
-		"proposeL2Output",
-		output.OutputRoot,
-		new(big.Int).SetUint64(output.BlockRef.Number),
-		output.Status.CurrentL1.Hash,
-		new(big.Int).SetUint64(output.Status.CurrentL1.Number))
-}
-
 // sendTransaction creates & sends transactions through the underlying transaction manager.
-func (l *Challenger) sendTransaction(ctx context.Context, output *eth.OutputResponse) error {
-	data, err := l.ProposeL2OutputTxData(output)
+func (c *Challenger) sendTransaction(ctx context.Context, output common.Hash) error {
+	// Get the adg address from the dgf
+	cCtx, cCancel := context.WithTimeout(ctx, c.networkTimeout)
+	defer cCancel()
+	adgAddr, err := c.dgfContract.Games(&bind.CallOpts{Context: cCtx}, 1, output, []byte{})
 	if err != nil {
 		return err
 	}
-	receipt, err := l.txMgr.Send(ctx, txmgr.TxCandidate{
+	// adgContract, err := bindings.NewMockAttestationDisputeGameCaller(adgAddr, c.l1Client)
+	// if err != nil {
+	// 	return err
+	// }
+	// TODO: Create an eip-712 signature for the contested output
+	data, err := c.adgABI.Pack("challenge", output)
+	if err != nil {
+		return err
+	}
+	receipt, err := c.txMgr.Send(ctx, txmgr.TxCandidate{
 		TxData:   data,
-		To:       l.l2ooContractAddr,
+		To:       adgAddr,
 		GasLimit: 0,
-		From:     l.from,
+		From:     c.from,
 	})
 	if err != nil {
 		return err
 	}
-	l.log.Info("proposer tx successfully published", "tx_hash", receipt.TxHash)
+	c.log.Info("challenger tx successfully published", "tx_hash", receipt.TxHash)
 	return nil
 }
 
@@ -363,7 +361,6 @@ func (c *Challenger) loop() {
 			return
 
 		case vLog := <-logs:
-			fmt.Println(vLog) // pointer to event log
 			/*
 				Event is encoded as:
 					bytes32 indexed outputRoot,
@@ -375,29 +372,25 @@ func (c *Challenger) loop() {
 			expected := vLog.Topics[1]
 			c.log.Info("Validating output", "l2BlockNumber", l2BlockNumber, "outputRoot", expected.Hex())
 			isValid, err := c.ValidateOutput(ctx, l2BlockNumber, eth.Bytes32(common.Hex2BytesFixed(expected.Hex(), 32)))
-			if err != nil {
-				break
-			}
-			// If the output is valid, we don't challenge
-			if isValid {
-				c.metr.RecordValidOutput(
-					eth.L2BlockRef{
-						Hash:   vLog.Topics[0],
-						Number: l2BlockNumber.Uint64(),
-					},
-				)
+			if err != nil || isValid {
 				break
 			}
 
-			// TODO: Submit a challenge
-			// cCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-			// if err := l.sendTransaction(cCtx, output); err != nil {
-			// 	l.log.Error("Failed to send proposal transaction", "err", err)
-			// 	cancel()
-			// 	break
-			// }
-			// l.metr.RecordL2BlocksProposed(output.BlockRef)
-			// cancel()
+			// Submit a challenge
+			c.metr.RecordInvalidOutput(
+				eth.L2BlockRef{
+					Hash:   vLog.Topics[0],
+					Number: l2BlockNumber.Uint64(),
+				},
+			)
+			cCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			if err := c.sendTransaction(cCtx, expected); err != nil {
+				c.log.Error("Failed to challenge transaction", "err", err)
+				cancel()
+				break
+			}
+			c.metr.RecordChallengeSent(l2BlockNumber, expected)
+			cancel()
 		case <-c.done:
 			return
 		}

@@ -1,6 +1,8 @@
 .PHONY: clean tidy format lint build run test
 
-all: clean tidy format lint build run test
+all: clean tidy format lint build run
+
+ci: clean tidy format lint build test
 
 clean:
 	rm -rf bin/op-challenger
