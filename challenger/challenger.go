@@ -371,7 +371,7 @@ func (c *Challenger) loop() {
 			l2BlockNumber := new(big.Int).SetBytes(vLog.Topics[3][:])
 			expected := vLog.Topics[1]
 			c.log.Info("Validating output", "l2BlockNumber", l2BlockNumber, "outputRoot", expected.Hex())
-			isValid, err := c.ValidateOutput(ctx, l2BlockNumber, eth.Bytes32(common.Hex2BytesFixed(expected.Hex(), 32)))
+			isValid, err := c.ValidateOutput(ctx, l2BlockNumber, (eth.Bytes32)(expected))
 			if err != nil || isValid {
 				break
 			}
