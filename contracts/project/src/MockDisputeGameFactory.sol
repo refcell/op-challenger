@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { IDisputeGame } from "./IDisputeGame.sol";
 import { GameType, Claim } from "./Types.sol";
+import { IDisputeGame } from "./IDisputeGame.sol";
 import { MockAttestationDisputeGame } from "./MockAttestationDisputeGame.sol";
 
 /// @title MockDisputeGameFactory

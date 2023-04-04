@@ -1,6 +1,6 @@
 #! /bin/bash
 
-cd interfaces
+cd project
 forge inspect IL2OutputOracle abi > ../abi/l2OutputOracle.abi
 forge inspect IL2OutputOracle bytecode > ../bin/l2OutputOracle.bin
 forge inspect MockAttestationDisputeGame abi > ../abi/mockAttestationDisputeGame.abi

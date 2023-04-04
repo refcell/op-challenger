@@ -4,6 +4,9 @@ all: clean tidy format golangci lint build run
 
 ci: clean tidy format golangci lint build test
 
+start-devnet:
+	./start_devnet.sh
+
 clean:
 	rm -rf bin/op-challenger
 	go clean -cache

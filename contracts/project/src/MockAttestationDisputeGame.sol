@@ -3,9 +3,11 @@ pragma solidity ^0.8.19;
 
 import { Claim } from "./Types.sol";
 
+import { IDisputeGame } from "./IDisputeGame.sol";
+
 /// @title MockAttestationDisputeGame
 /// @dev Tests the `op-challenger` on a local devnet.
-contract MockAttestationDisputeGame {
+contract MockAttestationDisputeGame is IDisputeGame {
     Claim public immutable ROOT_CLAIM;
     uint256 public immutable L2_BLOCK_NUMBER;
     mapping(address => bool) public challenges;
