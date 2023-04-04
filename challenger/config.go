@@ -45,9 +45,8 @@ type CLIConfig struct {
 	// DGFAddress is the DisputeGameFactory contract address.
 	DGFAddress string
 
-	// PollInterval is the delay between querying L2 for more transaction
-	// and creating a new batch.
-	PollInterval time.Duration
+	// PrivateKey is the private key of the account that will be used to send transactions.
+	PrivateKey string
 
 	TxMgrConfig flags.TxManagerCLIConfig
 
@@ -87,6 +86,7 @@ func NewConfig(ctx *cli.Context) CLIConfig {
 		RollupRpc:   ctx.GlobalString(flags.RollupRpcFlag.Name),
 		L2OOAddress: ctx.GlobalString(flags.L2OOAddressFlag.Name),
 		DGFAddress:  ctx.GlobalString(flags.DGFAddressFlag.Name),
+		PrivateKey:  ctx.GlobalString(flags.PrivateKeyFlag.Name),
 		TxMgrConfig: flags.ReadTxManagerCLIConfig(ctx),
 		// Optional Flags
 		RPCConfig:     oprpc.ReadCLIConfig(ctx),

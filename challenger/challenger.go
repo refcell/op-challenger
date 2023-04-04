@@ -144,16 +144,16 @@ type Challenger struct {
 	networkTimeout time.Duration
 }
 
-// NewChallengerFromCLIConfig creates a new L2 Output Submitter given the CLI Config
+// NewChallengerFromCLIConfig creates a new Challenger given the CLI Config
 func NewChallengerFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Metricer) (*Challenger, error) {
-	proposerConfig, err := NewChallengerConfigFromCLIConfig(cfg, l, m)
+	challengerConfig, err := NewChallengerConfigFromCLIConfig(cfg, l, m)
 	if err != nil {
 		return nil, err
 	}
-	return NewChallenger(*proposerConfig, l, m)
+	return NewChallenger(*challengerConfig, l, m)
 }
 
-// NewChallengerConfigFromCLIConfig creates the proposer config from the CLI config.
+// NewChallengerConfigFromCLIConfig creates the challenger config from the CLI config.
 func NewChallengerConfigFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Metricer) (*Config, error) {
 	l2ooAddress, err := parseAddress(cfg.L2OOAddress)
 	if err != nil {
