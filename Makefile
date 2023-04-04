@@ -16,7 +16,7 @@ format:
 	gofmt -s -w -l .
 
 lint:
-	golangci-lint run -E goimports,sqlclosecheck,bodyclose,asciicheck,misspell,errorlint -e "errors.As" -e "errors.Is"
+	golangci-lint run -E goimports,sqlclosecheck,bodyclose,asciicheck,misspell,errorlint -e "errors.As" -e "errors.Is" --timeout 5m
 
 build:
 	env GO111MODULE=on go build -o bin/op-challenger ./cmd
