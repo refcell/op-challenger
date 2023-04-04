@@ -26,15 +26,13 @@ type Config struct {
 	TxManager          txmgr.TxManager
 	L1Client           *ethclient.Client
 	RollupClient       *sources.RollupClient
-	AllowNonFinalized  bool
+	From               common.Address
 }
 
 // CLIConfig is a well typed config that is parsed from the CLI params.
 // This also contains config options for auxiliary services.
-// It is transformed into a `Config` before the L2 output submitter is started.
+// It is transformed into a `Config` before the challenger is started.
 type CLIConfig struct {
-	/* Required Params */
-
 	// L1EthRpc is the HTTP provider URL for L1.
 	L1EthRpc string
 
@@ -51,11 +49,7 @@ type CLIConfig struct {
 	// and creating a new batch.
 	PollInterval time.Duration
 
-	// AllowNonFinalized can be set to true to propose outputs
-	// for L2 blocks derived from non-finalized L1 data.
-	AllowNonFinalized bool
-
-	TxMgrConfig txmgr.CLIConfig
+	TxMgrConfig flags.TxManagerCLIConfig
 
 	RPCConfig oprpc.CLIConfig
 
@@ -93,7 +87,7 @@ func NewConfig(ctx *cli.Context) CLIConfig {
 		RollupRpc:   ctx.GlobalString(flags.RollupRpcFlag.Name),
 		L2OOAddress: ctx.GlobalString(flags.L2OOAddressFlag.Name),
 		DGFAddress:  ctx.GlobalString(flags.DGFAddressFlag.Name),
-		TxMgrConfig: txmgr.ReadCLIConfig(ctx),
+		TxMgrConfig: flags.ReadTxManagerCLIConfig(ctx),
 		// Optional Flags
 		RPCConfig:     oprpc.ReadCLIConfig(ctx),
 		LogConfig:     oplog.ReadCLIConfig(ctx),

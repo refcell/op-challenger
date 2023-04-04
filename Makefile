@@ -1,9 +1,11 @@
-.PHONY: clean format lint build run test
+.PHONY: clean tidy format lint build run test
 
-all: clean format lint build run test
+all: clean tidy format lint build run test
 
 clean:
 	rm -rf bin/op-challenger
+	go clean -cache
+	go clean -modcache
 
 format:
 	gofmt -s -w -l .

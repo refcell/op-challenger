@@ -22,6 +22,7 @@ import (
 	cli "github.com/urfave/cli"
 
 	bindings "github.com/refcell/op-challenger/contracts/bindings"
+	flags "github.com/refcell/op-challenger/flags"
 	metrics "github.com/refcell/op-challenger/metrics"
 
 	opBindings "github.com/ethereum-optimism/optimism/op-bindings/bindings"
@@ -47,13 +48,13 @@ func Main(version string, cliCtx *cli.Context) error {
 	m := metrics.NewMetrics("default")
 	l.Info("Initializing Challenger")
 
-	proposerConfig, err := NewChallengerConfigFromCLIConfig(cfg, l, m)
+	challengerConfig, err := NewChallengerConfigFromCLIConfig(cfg, l, m)
 	if err != nil {
 		l.Error("Unable to create the Challenger", "error", err)
 		return err
 	}
 
-	challenger, err := NewChallenger(*proposerConfig, l, m)
+	challenger, err := NewChallenger(*challengerConfig, l, m)
 	if err != nil {
 		l.Error("Unable to create the Challenger", "error", err)
 		return err
@@ -87,7 +88,7 @@ func Main(version string, cliCtx *cli.Context) error {
 				l.Error("error starting metrics server", err)
 			}
 		}()
-		m.StartBalanceMetrics(ctx, l, proposerConfig.L1Client, proposerConfig.TxManager.From())
+		m.StartBalanceMetrics(ctx, l, challengerConfig.L1Client, challengerConfig.From)
 	}
 
 	rpcCfg := cfg.RPCConfig
@@ -120,6 +121,8 @@ type Challenger struct {
 	done  chan struct{}
 	log   log.Logger
 	metr  metrics.Metricer
+
+	from common.Address
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -160,18 +163,18 @@ func NewChallengerConfigFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Met
 		return nil, err
 	}
 
-	txManagerConfig, err := txmgr.NewConfig(cfg.TxMgrConfig, l)
-	if err != nil {
-		return nil, err
-	}
-	txManager := txmgr.NewSimpleTxManager("challenger", l, m, txManagerConfig)
-
 	// Connect to L1 and L2 providers. Perform these last since they are the most expensive.
 	ctx := context.Background()
 	l1Client, err := dialEthClientWithTimeout(ctx, cfg.L1EthRpc)
 	if err != nil {
 		return nil, err
 	}
+
+	txManagerConfig, err := flags.NewTxManagerConfig(cfg.TxMgrConfig, l)
+	if err != nil {
+		return nil, err
+	}
+	txManager := txmgr.NewSimpleTxManager("challenger", l, txManagerConfig, l1Client)
 
 	rollupClient, err := dialRollupClientWithTimeout(ctx, cfg.RollupRpc)
 	if err != nil {
@@ -184,8 +187,8 @@ func NewChallengerConfigFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Met
 		NetworkTimeout:     txManagerConfig.NetworkTimeout,
 		L1Client:           l1Client,
 		RollupClient:       rollupClient,
-		AllowNonFinalized:  cfg.AllowNonFinalized,
 		TxManager:          txManager,
+		From:               txManagerConfig.From,
 	}, nil
 }
 
@@ -245,6 +248,8 @@ func NewChallenger(cfg Config, l log.Logger, m metrics.Metricer) (*Challenger, e
 		ctx:    ctx,
 		cancel: cancel,
 		metr:   m,
+
+		from: cfg.From,
 
 		l1Client: cfg.L1Client,
 
@@ -321,7 +326,7 @@ func (l *Challenger) sendTransaction(ctx context.Context, output *eth.OutputResp
 		TxData:   data,
 		To:       l.l2ooContractAddr,
 		GasLimit: 0,
-		From:     l.txMgr.From(),
+		From:     l.from,
 	})
 	if err != nil {
 		return err
@@ -369,7 +374,7 @@ func (c *Challenger) loop() {
 			l2BlockNumber := new(big.Int).SetBytes(vLog.Topics[3][:])
 			expected := vLog.Topics[1]
 			c.log.Info("Validating output", "l2BlockNumber", l2BlockNumber, "outputRoot", expected.Hex())
-			isValid, err := c.ValidateOutput(ctx, l2BlockNumber, expected)
+			isValid, err := c.ValidateOutput(ctx, l2BlockNumber, eth.Bytes32(common.Hex2BytesFixed(expected.Hex(), 32)))
 			if err != nil {
 				break
 			}

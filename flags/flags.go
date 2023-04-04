@@ -8,7 +8,6 @@ import (
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
 	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
-	// txmgr "github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
 const envVarPrefix = "OP_CHALLENGER"
@@ -61,7 +60,7 @@ func init() {
 	cliFlags = append(cliFlags, oplog.CLIFlags(envVarPrefix)...)
 	cliFlags = append(cliFlags, opmetrics.CLIFlags(envVarPrefix)...)
 	cliFlags = append(cliFlags, oppprof.CLIFlags(envVarPrefix)...)
-	// cliFlags = append(cliFlags, txmgr.CLIFlags(envVarPrefix)...)
+	cliFlags = append(cliFlags, TxManagerCLIFlags(envVarPrefix)...)
 
 	Flags = cliFlags
 }
