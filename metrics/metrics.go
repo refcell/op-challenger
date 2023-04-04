@@ -3,16 +3,15 @@ package metrics
 import (
 	"context"
 
-	// eth "github.com/ethereum-optimism/optimism/op-node/eth"
-
 	common "github.com/ethereum/go-ethereum/common"
+	types "github.com/ethereum/go-ethereum/core/types"
 	ethclient "github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/ethereum/go-ethereum/log"
+	params "github.com/ethereum/go-ethereum/params"
 	prometheus "github.com/prometheus/client_golang/prometheus"
 
 	eth "github.com/ethereum-optimism/optimism/op-node/eth"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
-	txmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 )
 
 const Namespace = "op_challenger"
@@ -24,10 +23,10 @@ type Metricer interface {
 	// Records all L1 and L2 block events
 	opmetrics.RefMetricer
 
-	// Record Tx metrics
-	txmetrics.TxMetricer
+	RecordValidOutput(l2ref eth.L2BlockRef)
+	RecordInvalidOutput(l2ref eth.L2BlockRef)
 
-	RecordL2BlocksProposed(l2ref eth.L2BlockRef)
+	RecordL1GasFee(receipt *types.Receipt)
 }
 
 type Metrics struct {
@@ -36,7 +35,8 @@ type Metrics struct {
 	factory  opmetrics.Factory
 
 	opmetrics.RefMetrics
-	txmetrics.TxMetrics
+
+	TxL1GasFee prometheus.Gauge
 
 	Info prometheus.GaugeVec
 	Up   prometheus.Gauge
@@ -59,7 +59,13 @@ func NewMetrics(procName string) *Metrics {
 		factory:  factory,
 
 		RefMetrics: opmetrics.MakeRefMetrics(ns, factory),
-		TxMetrics:  txmetrics.MakeTxMetrics(ns, factory),
+
+		TxL1GasFee: factory.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "tx_fee_gwei",
+			Help:      "L1 gas fee for transactions in GWEI",
+			Subsystem: "txmgr",
+		}),
 
 		Info: *factory.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: ns,
@@ -98,10 +104,21 @@ func (m *Metrics) RecordUp() {
 }
 
 const (
-	BlockProposed = "proposed"
+	ValidOutput   = "valid_output"
+	InvalidOutput = "invalid_output"
 )
 
-// RecordL2BlocksProposed should be called when new L2 block is proposed
-func (m *Metrics) RecordL2BlocksProposed(l2ref eth.L2BlockRef) {
-	m.RecordL2Ref(BlockProposed, l2ref)
+// RecordValidOutput should be called when a valid output is found
+func (m *Metrics) RecordValidOutput(l2ref eth.L2BlockRef) {
+	m.RecordL2Ref(ValidOutput, l2ref)
+}
+
+// RecordInvalidOutput should be called when an invalid output is found
+func (m *Metrics) RecordInvalidOutput(l2ref eth.L2BlockRef) {
+	m.RecordL2Ref(InvalidOutput, l2ref)
+}
+
+// RecordL1GasFee records the L1 gas fee for a transaction
+func (m *Metrics) RecordL1GasFee(receipt *types.Receipt) {
+	m.TxL1GasFee.Set(float64(receipt.EffectiveGasPrice.Uint64() * receipt.GasUsed / params.GWei))
 }

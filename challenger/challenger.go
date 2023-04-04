@@ -17,6 +17,7 @@ import (
 	bind "github.com/ethereum/go-ethereum/accounts/abi/bind"
 	common "github.com/ethereum/go-ethereum/common"
 	goTypes "github.com/ethereum/go-ethereum/core/types"
+	ethclient "github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/ethereum/go-ethereum/log"
 	cli "github.com/urfave/cli"
 
@@ -123,7 +124,8 @@ type Challenger struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// RollupClient is used to retrieve output roots from
+	l1Client *ethclient.Client
+
 	rollupClient *sources.RollupClient
 
 	l2ooContract     *opBindings.L2OutputOracleCaller
@@ -134,12 +136,6 @@ type Challenger struct {
 	dgfContractAddr common.Address
 	dgfABI          *abi.ABI
 
-	// AllowNonFinalized enables the proposal of safe, but non-finalized L2 blocks.
-	// The L1 block-hash embedded in the proposal TX is checked and should ensure the proposal
-	// is never valid on an alternative L1 chain that would produce different L2 data.
-	// This option is not necessary when higher proposal latency is acceptable and L1 is healthy.
-	allowNonFinalized bool
-	// How frequently to poll L2 for new finalized outputs
 	networkTimeout time.Duration
 }
 
@@ -191,7 +187,6 @@ func NewChallengerConfigFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Met
 		AllowNonFinalized:  cfg.AllowNonFinalized,
 		TxManager:          txManager,
 	}, nil
-
 }
 
 // NewChallenger creates a new Challenger
@@ -251,6 +246,8 @@ func NewChallenger(cfg Config, l log.Logger, m metrics.Metricer) (*Challenger, e
 		cancel: cancel,
 		metr:   m,
 
+		l1Client: cfg.L1Client,
+
 		rollupClient: cfg.RollupClient,
 
 		l2ooContract:     l2ooContract,
@@ -261,8 +258,7 @@ func NewChallenger(cfg Config, l log.Logger, m metrics.Metricer) (*Challenger, e
 		dgfContractAddr: cfg.DisputeGameFactory,
 		dgfABI:          dgfAbi,
 
-		allowNonFinalized: cfg.AllowNonFinalized,
-		networkTimeout:    cfg.NetworkTimeout,
+		networkTimeout: cfg.NetworkTimeout,
 	}, nil
 }
 
@@ -280,12 +276,12 @@ func (l *Challenger) Stop() {
 
 // ValidateOutput checks that a given output is expected via a trusted rollup node rpc.
 // It returns: if the output is correct, error
-func (l *Challenger) ValidateOutput(ctx context.Context, l2BlockNumber *big.Int, expected Bytes32) (bool, error) {
+func (l *Challenger) ValidateOutput(ctx context.Context, l2BlockNumber *big.Int, expected eth.Bytes32) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, l.networkTimeout)
 	defer cancel()
 	output, err := l.rollupClient.OutputAtBlock(ctx, l2BlockNumber.Uint64())
 	if err != nil {
-		l.log.Error("failed to fetch output at block %d: %w", block, err)
+		l.log.Error("failed to fetch output for l2BlockNumber %d: %w", l2BlockNumber, err)
 		return true, err
 	}
 	if output.Version != supportedL2OutputVersion {
@@ -299,7 +295,6 @@ func (l *Challenger) ValidateOutput(ctx context.Context, l2BlockNumber *big.Int,
 	}
 	return output.OutputRoot != expected, nil
 }
-
 
 // ProposeL2OutputTxData creates the transaction data for the ProposeL2Output function
 func (l *Challenger) ProposeL2OutputTxData(output *eth.OutputResponse) ([]byte, error) {
@@ -336,13 +331,13 @@ func (l *Challenger) sendTransaction(ctx context.Context, output *eth.OutputResp
 }
 
 // loop is responsible for creating & submitting the next outputs
-func (l *Challenger) loop() {
-	defer l.wg.Done()
+func (c *Challenger) loop() {
+	defer c.wg.Done()
 
-	ctx := l.ctx
+	ctx := c.ctx
 
 	// Listen for `OutputProposed` events from the L2 Output Oracle contract
-	event := l.l2ooABI.Events["OutputProposed"]
+	event := c.l2ooABI.Events["OutputProposed"]
 	query := goEth.FilterQuery{
 		Topics: [][]common.Hash{
 			{event.ID},
@@ -350,17 +345,20 @@ func (l *Challenger) loop() {
 	}
 
 	logs := make(chan goTypes.Log)
-    sub, err := l. .SubscribeFilterLogs(context.Background(), query, logs)
-    if err != nil {
-        log.Fatal(err)
-    }
+	sub, err := c.l1Client.SubscribeFilterLogs(context.Background(), query, logs)
+	if err != nil {
+		c.log.Error("failed to subscribe to logs", "err", err)
+		return
+	}
 
-    for {
-        select {
-        case err := <-sub.Err():
-            log.Fatal(err)
-        case vLog := <-logs:
-            fmt.Println(vLog) // pointer to event log
+	for {
+		select {
+		case err := <-sub.Err():
+			c.log.Error("failed to subscribe to logs", "err", err)
+			return
+
+		case vLog := <-logs:
+			fmt.Println(vLog) // pointer to event log
 			/*
 				Event is encoded as:
 					bytes32 indexed outputRoot,
@@ -368,15 +366,21 @@ func (l *Challenger) loop() {
 					uint256 indexed l2BlockNumber,
 					uint256 l1Timestamp
 			*/
-			l2BlockNumber := vLog.Topics[3]
+			l2BlockNumber := new(big.Int).SetBytes(vLog.Topics[3][:])
 			expected := vLog.Topics[1]
-			isValid, err := l.ValidateOutput(ctx, l2BlockNumber, expected)
+			c.log.Info("Validating output", "l2BlockNumber", l2BlockNumber, "outputRoot", expected.Hex())
+			isValid, err := c.ValidateOutput(ctx, l2BlockNumber, expected)
 			if err != nil {
 				break
 			}
 			// If the output is valid, we don't challenge
 			if isValid {
-				l.metr.RecordValidOutput(l2BlockNumber)
+				c.metr.RecordValidOutput(
+					eth.L2BlockRef{
+						Hash:   vLog.Topics[0],
+						Number: l2BlockNumber.Uint64(),
+					},
+				)
 				break
 			}
 
@@ -389,6 +393,8 @@ func (l *Challenger) loop() {
 			// }
 			// l.metr.RecordL2BlocksProposed(output.BlockRef)
 			// cancel()
-        }
-    }
+		case <-c.done:
+			return
+		}
+	}
 }

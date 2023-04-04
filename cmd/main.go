@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	challenger "github.com/refcell/op-challenger/challenger"
@@ -13,18 +12,20 @@ import (
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 )
 
+const Version = "1.0.0"
+
 func main() {
 	oplog.SetupDefaults()
 
 	app := cli.NewApp()
 	app.Flags = flags.Flags
-	app.Version = fmt.Sprintf("1.0.0")
+	app.Version = Version
 	app.Name = "op-challenger"
 	app.Usage = "Multi-mode Challenger Agent"
 	app.Description = "A multi-mode op-stack challenge agent for output dispute games written in golang."
 
 	app.Action = func(ctx *cli.Context) error {
-		return challenger.Main(ctx)
+		return challenger.Main(Version, ctx)
 	}
 	err := app.Run(os.Args)
 	if err != nil {
