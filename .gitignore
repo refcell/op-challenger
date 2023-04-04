@@ -17,3 +17,5 @@
 # Solidity-related files
 out
 cache
+
+bin

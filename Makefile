@@ -9,6 +9,9 @@ clean:
 	go clean -cache
 	go clean -modcache
 
+deps:
+	go get ./...
+
 format:
 	gofmt -s -w -l .
 
