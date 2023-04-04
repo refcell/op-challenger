@@ -1,16 +1,16 @@
 .PHONY: clean tidy format lint build run test
 
-all: clean tidy format lint build run
+all: clean tidy format golangci lint build run
 
-ci: clean tidy format lint build test
+ci: clean tidy format golangci lint build test
 
 clean:
 	rm -rf bin/op-challenger
 	go clean -cache
 	go clean -modcache
 
-deps:
-	go get ./...
+golangci:
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 format:
 	gofmt -s -w -l .
