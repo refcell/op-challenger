@@ -22,6 +22,7 @@ build:
 	env GO111MODULE=on go build -o bin/op-challenger ./cmd
 
 run:
+	make build
 	bin/op-challenger
 
 test:

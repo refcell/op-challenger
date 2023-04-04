@@ -105,11 +105,18 @@ The next iteration of the challenge agent will use fault proofs to challenge inv
 
 A future iteration of permissionless outputs will allow for validity (zero-knowledge) proofs.
 
+
 ## Contributing
 
-All contributions to magi are welcome. Before opening a PR, please submit an issue detailing the bug or feature. When opening a PR, please ensure that your contribution builds using the configured build target `make build`, has been linted with `golangci-lint` (simply run `make lint`), and contains tests when applicable.
+See [CONTRIBUTING.md](./CONTRIBUTING.md)
 
-## Acks
+
+## License
+
+[MIT](./LICENSE.md), forever and always.
+
+
+## Acknowledgements
 
 - [op-challenger](https://github.com/clabby/op-challenger): a challenge agent built in pure rust 🦀 by [clabby](https://github.com/clabby).
 - [optimism](https://github.com/ethereum-optimism/optimism)
