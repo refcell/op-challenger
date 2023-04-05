@@ -2,15 +2,12 @@
 
 # `op-challenger` • [![ci](https://github.com/refcell/op-challenger/actions/workflows/ci.yml/badge.svg?label=ci)](https://github.com/refcell/op-challenger/actions/workflows/ci.yml) ![license](https://img.shields.io/badge/License-MIT-green.svg?label=license) ![maintainer](https://img.shields.io/badge/maintainer-refcell-orange.svg?label=maintainer)
 
-A multi-mode op-stack challenge agent for output dispute games written in golang.
+A modular [op-stack](https://stack.optimism.io/) challenge agent for attestation (fault and validity soon™) dispute games written in golang.
 
-> **Warning**
->
-> This is a WIP Proof of Concept and is not ready, nor intended, for production use.
-> Please visit the [Optimism Monorepo](https://github.com/ethereum-optimism/optimism) repository so you don't footgun yourself.
+This is a WIP Proof of Concept and is not ready, nor intended, for production use. Visit the [Optimism Monorepo](https://github.com/ethereum-optimism/optimism) repository for an official implementation.
 
 
-## Usage
+## Quickstart
 
 The easiest way to install `op-challenger` is to download the latest binary from [challenger.refcell.org](https://challenger.refcell.org). To do this, just run:
 
@@ -23,6 +20,8 @@ curl -s https://challenger.refcell.org | sh
 </p>
 
 Alternatively, you can build the `op-challenger` binary locally using the pre-configured makefile target by running `make build`, and then running `./op-challenger --help` to see the available options.
+
+## Usage
 
 `op-challenger` is configurable via command line flags and environment variables. The help menu shows the available config options and can be accessed by running `./op-challenger --help`.
 
