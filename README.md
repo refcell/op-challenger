@@ -2,7 +2,7 @@
 
 # op-challenger • [![ci](https://github.com/refcell/op-challenger/actions/workflows/ci.yml/badge.svg?label=ci)](https://github.com/refcell/op-challenger/actions/workflows/ci.yml) ![license](https://img.shields.io/badge/License-MIT-green.svg?label=license) ![maintainer](https://img.shields.io/badge/maintainer-refcell-orange.svg?label=maintainer)
 
-A modular [op-stack](https://stack.optimism.io/) challenge agent for attestation (fault and validity soon™) dispute games written in golang. Note, this is a WIP Proof of Concept and is not intended for production use. The authors of this repository explicitly do not recommend the expressed language, and further endorse the [rust op-challenger](https://github.com/clabby/op-challenger).
+A modular [op-stack](https://stack.optimism.io/) challenge agent for attestation (fault and validity soon™) dispute games written in golang. Note: this is a WIP Proof of Concept and is not intended for production use. The authors of this repository hereby expressely do not recommend the implementation language, and further endorse the [rust op-challenger](https://github.com/clabby/op-challenger).
 
 ## Quickstart
 
