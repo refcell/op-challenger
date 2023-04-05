@@ -1,6 +1,6 @@
 .PHONY: clean tidy format lint build run test
 
-all: clean tidy format golangci lint build run
+all: clean tidy format golangci lint build start-devnet run
 
 ci: clean tidy format golangci lint build test
 

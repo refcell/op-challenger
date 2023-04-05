@@ -2,24 +2,25 @@
 
 # `op-challenger` • [![ci](https://github.com/refcell/op-challenger/actions/workflows/ci.yml/badge.svg?label=ci)](https://github.com/refcell/op-challenger/actions/workflows/ci.yml) ![license](https://img.shields.io/badge/License-MIT-green.svg?label=license) ![maintainer](https://img.shields.io/badge/maintainer-refcell-orange.svg?label=maintainer)
 
-A modular [op-stack](https://stack.optimism.io/) challenge agent for attestation (fault and validity soon™) dispute games written in golang.
-
-This is a WIP Proof of Concept and is not ready, nor intended, for production use. Visit the [Optimism Monorepo](https://github.com/ethereum-optimism/optimism) repository for an official implementation.
-
+A modular [op-stack](https://stack.optimism.io/) challenge agent for attestation (fault and validity soon™) dispute games written in golang. Note, this is a WIP Proof of Concept and is not intended for production use. The authors of this repository explicitly do not recommend the expressed language, and further endorse the [rust op-challenger](https://github.com/clabby/op-challenger).
 
 ## Quickstart
 
-The easiest way to install `op-challenger` is to download the latest binary from [challenger.refcell.org](https://challenger.refcell.org). To do this, just run:
+First, clone the [Optimism Monorepo](https://github.com/ethereum-optimism/optimism) and set the `MONOREPO_DIR` environment variable to the path of that directory in a `.env` file as shown in `.env.example`.
 
-```bash
-curl -s https://challenger.refcell.org | sh
-```
+Then, you can simply run `make`, which will compile all solidity + golang sources, bring up the Optimism [devnet](https://github.com/ethereum-optimism/optimism/blob/develop/ops-bedrock/devnet-up.sh) while also deploying the [mock dispute game contracts](./contracts), and then run the `op-challenger`. 
 
 <p align="center">
   <img width="300px" src="./public/op-gopher.jpeg" />
 </p>
 
 Alternatively, you can build the `op-challenger` binary locally using the pre-configured makefile target by running `make build`, and then running `./op-challenger --help` to see the available options.
+
+In the future, we intend to support downloading the `op-challenger` binary from [challenger.refcell.org](https://challenger.refcell.org) using this command:
+
+```bash
+curl -s https://challenger.refcell.org | sh
+```
 
 ## Usage
 
@@ -92,11 +93,13 @@ GLOBAL OPTIONS:
 ```
 
 
-## Specifications
+## Inner Workings
+
+<img src="./public/op-challenger.png" />
 
 The op-challenger is a challenge agent for the output dispute game. It is responsible for challenging invalid state roots and invalid transactions. It is also responsible for challenging invalid fraud proofs.
 
-This implementation is loosely based off the `op-proposer`, a proposer agent that is responsible for proposing new outputs to the `L2OutputOracle`. And this should make sense. Where the `op-proposer` _posts_ `output`s to the `L2OutputOracle`, the `op-challenger` validates these outputs and disputes them if invalid. Thus, the only additional functionality the `op-challenger` needs to implement is the ability to challenge invalid fraud proofs.
+This implementation is loosely based off the `op-proposer`, a proposer agent that is responsible for proposing new outputs to the `L2OutputOracle`. And this should make sense; where the `op-proposer` _posts_ `output`s to the `L2OutputOracle`, the `op-challenger` validates these outputs and disputes them if invalid. The primary functional difference the `op-challenger` must implement is the ability to challenge invalid outputs.
 
 The naive challenge agent will be an attestation challenger which is a permissioned set of actors running the `op-challenger` attest.
 
