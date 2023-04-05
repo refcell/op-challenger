@@ -1,4 +1,4 @@
-<img align="right" width="150" height="150" top="100" src="./public/op-gopher.png">
+<img align="right" width="200" height="180" top="100" src="./public/op-gopher.png">
 
 # op-challenger • [![ci](https://github.com/refcell/op-challenger/actions/workflows/ci.yml/badge.svg?label=ci)](https://github.com/refcell/op-challenger/actions/workflows/ci.yml) ![license](https://img.shields.io/badge/License-MIT-green.svg?label=license) ![maintainer](https://img.shields.io/badge/maintainer-refcell-orange.svg?label=maintainer)
 
