@@ -3,18 +3,27 @@ name: ci
 on: [push]
 
 jobs:
+  foundry-tests:
+    name: Foundry project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+      - name: Run Forge build
+        run: cd contracts/project && forge test
+        id: build
   tests:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-
     - name: Set up Go
       uses: actions/setup-go@v3
       with:
         go-version: 1.19
-
-    # - name: golangci-lint
-    #   uses: golangci/golangci-lint-action@v3
-
     - name: CI
       run: make ci
