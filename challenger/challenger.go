@@ -299,7 +299,7 @@ func (c *Challenger) ValidateOutput(ctx context.Context, l2BlockNumber *big.Int,
 	if output.OutputRoot == expected {
 		c.metr.RecordValidOutput(output.BlockRef)
 	}
-	return output.OutputRoot != expected, nil
+	return output.OutputRoot == expected, nil
 }
 
 // sendTransaction creates & sends transactions through the underlying transaction manager.
