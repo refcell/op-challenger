@@ -10,17 +10,9 @@ First, clone the [Optimism Monorepo](https://github.com/ethereum-optimism/optimi
 
 Then, you can simply run `make`, which will compile all solidity + golang sources, bring up the Optimism [devnet](https://github.com/ethereum-optimism/optimism/blob/develop/ops-bedrock/devnet-up.sh) while also deploying the [mock dispute game contracts](./contracts), and then run the `op-challenger`. 
 
-<p align="center">
-  <img width="300px" src="./public/op-gopher.jpeg" />
-</p>
-
 Alternatively, you can build the `op-challenger` binary locally using the pre-configured makefile target by running `make build`, and then running `./op-challenger --help` to see the available options.
 
-In the future, we intend to support downloading the `op-challenger` binary from [challenger.refcell.org](https://challenger.refcell.org) using this command:
-
-```bash
-curl -s https://challenger.refcell.org | sh
-```
+In the future, we intend to support downloading the `op-challenger` binary from [challenger.refcell.org](https://challenger.refcell.org) using `curl -s https://challenger.refcell.org | sh`
 
 ## Usage
 
@@ -28,14 +20,12 @@ curl -s https://challenger.refcell.org | sh
 
 Note that there are many global options, but the most important ones are:
 
-```md
-`OP_CHALLENGER_L1_ETH_RPC`: An L1 Ethereum RPC URL
-`OP_CHALLENGER_ROLLUP_RPC`: A Rollup Node RPC URL
-`OP_CHALLENGER_L2OO_ADDRESS`: The L2OutputOracle Contract Address
-`OP_CHALLENGER_DGF_ADDRESS`: Dispute Game Factory Contract Address
-`OP_CHALLENGER_PRIVATE_KEY`: The Private Key of the account that will be used to send challenge transactions
-`OP_CHALLENGER_L2_CHAIN_ID`: The chain id of the L2 network
-```
+- `OP_CHALLENGER_L1_ETH_RPC`: An L1 Ethereum RPC URL
+- `OP_CHALLENGER_ROLLUP_RPC`: A Rollup Node RPC URL
+- `OP_CHALLENGER_L2OO_ADDRESS`: The L2OutputOracle Contract Address
+- `OP_CHALLENGER_DGF_ADDRESS`: Dispute Game Factory Contract Address
+- `OP_CHALLENGER_PRIVATE_KEY`: The Private Key of the account that will be used to send challenge transactions
+- `OP_CHALLENGER_L2_CHAIN_ID`: The chain id of the L2 network
 
 Here is the full output of `./op-challenger --help`:
 

@@ -22,3 +22,5 @@ func (*noopMetrics) RecordValidOutput(l2ref eth.L2BlockRef)                     
 func (*noopMetrics) RecordInvalidOutput(l2ref eth.L2BlockRef)                           {}
 func (*noopMetrics) RecordChallengeSent(l2BlockNumber *big.Int, outputRoot common.Hash) {}
 func (*noopMetrics) RecordL1GasFee(receipt *types.Receipt)                              {}
+func (*noopMetrics) RecordDisputeGameCreated(l2BlockNumber *big.Int, outputRoot common.Hash, contract common.Address) {
+}

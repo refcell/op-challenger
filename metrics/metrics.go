@@ -28,6 +28,8 @@ type Metricer interface {
 	RecordInvalidOutput(l2ref eth.L2BlockRef)
 	RecordChallengeSent(l2BlockNumber *big.Int, outputRoot common.Hash)
 
+	RecordDisputeGameCreated(l2BlockNumber *big.Int, outputRoot common.Hash, contract common.Address)
+
 	RecordL1GasFee(receipt *types.Receipt)
 }
 
@@ -126,6 +128,10 @@ func (m *Metrics) RecordChallengeSent(l2BlockNumber *big.Int, outputRoot common.
 		Number: l2BlockNumber.Uint64(),
 		Hash:   outputRoot,
 	})
+}
+
+func (m *Metrics) RecordDisputeGameCreated(l2BlockNumber *big.Int, outputRoot common.Hash, contract common.Address) {
+	// TODO: record dg created here
 }
 
 // RecordL1GasFee records the L1 gas fee for a transaction

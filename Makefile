@@ -5,7 +5,7 @@ all: clean tidy format golangci lint build start-devnet run
 ci: clean tidy format golangci lint build test
 
 start-devnet:
-	./start_devnet.sh
+	./docker/start_devnet.sh
 
 clean:
 	rm -rf bin/op-challenger

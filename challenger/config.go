@@ -13,7 +13,8 @@ import (
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
-	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
+
+	// oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
 	txmgr "github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
@@ -27,6 +28,7 @@ type Config struct {
 	L1Client           *ethclient.Client
 	RollupClient       *sources.RollupClient
 	From               common.Address
+	privateKey         string
 }
 
 // CLIConfig is a well typed config that is parsed from the CLI params.
@@ -50,7 +52,7 @@ type CLIConfig struct {
 
 	TxMgrConfig flags.TxManagerCLIConfig
 
-	RPCConfig oprpc.CLIConfig
+	// RPCConfig oprpc.CLIConfig
 
 	LogConfig oplog.CLIConfig
 
@@ -60,9 +62,9 @@ type CLIConfig struct {
 }
 
 func (c CLIConfig) Check() error {
-	if err := c.RPCConfig.Check(); err != nil {
-		return err
-	}
+	// if err := c.RPCConfig.Check(); err != nil {
+	// 	return err
+	// }
 	if err := c.LogConfig.Check(); err != nil {
 		return err
 	}
@@ -89,7 +91,7 @@ func NewConfig(ctx *cli.Context) CLIConfig {
 		PrivateKey:  ctx.GlobalString(flags.PrivateKeyFlag.Name),
 		TxMgrConfig: flags.ReadTxManagerCLIConfig(ctx),
 		// Optional Flags
-		RPCConfig:     oprpc.ReadCLIConfig(ctx),
+		// RPCConfig:     oprpc.ReadCLIConfig(ctx),
 		LogConfig:     oplog.ReadCLIConfig(ctx),
 		MetricsConfig: opmetrics.ReadCLIConfig(ctx),
 		PprofConfig:   oppprof.ReadCLIConfig(ctx),
