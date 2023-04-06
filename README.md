@@ -59,17 +59,15 @@ GLOBAL OPTIONS:
 
 ## Inner Workings
 
-<img src="./public/op-challenger.png" />
-
-The op-challenger is a challenge agent for the output dispute game. It is responsible for challenging invalid state roots and invalid transactions. It is also responsible for challenging invalid fraud proofs.
+The op-challenger is a challenge agent for the output dispute game. It is responsible for challenging output roots.
 
 This implementation is loosely based off the `op-proposer`, a proposer agent that is responsible for proposing new outputs to the `L2OutputOracle`. And this should make sense; where the `op-proposer` _posts_ `output`s to the `L2OutputOracle`, the `op-challenger` validates these outputs and disputes them if invalid. The primary functional difference the `op-challenger` must implement is the ability to challenge invalid outputs.
 
-The naive challenge agent will be an attestation challenger which is a permissioned set of actors running the `op-challenger` attest.
+The naive challenge agent will be an attestation challenger which is a permissioned set of actors running the `op-challenger`. Below we illustrate how the challenger agent interacts with the [op-stack](https://stack.optimism.io/)'s permissionless output proposal system.
 
-The next iteration of the challenge agent will use fault proofs to challenge invalid outputs. This will involve a more complex dispute game which will allow for permissionless challengers by attaching bonds to each level of the dispute game.
+<img src="./public/op-challenger.png" />
 
-A future iteration of permissionless outputs will allow for validity (zero-knowledge) proofs.
+The next iteration of the challenge agent will use fault proofs to challenge invalid outputs. This will involve a more complex dispute game which will allow for permissionless challengers by attaching bonds to each level of the dispute game. A future iteration could allow for validity (zero-knowledge) proofs.
 
 
 ## Contributing
@@ -84,6 +82,6 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ## Acknowledgements
 
-- [op-challenger](https://github.com/clabby/op-challenger): a challenge agent built in pure rust 🦀 by [clabby](https://github.com/clabby).
-- [optimism](https://github.com/ethereum-optimism/optimism)
-- [op-stack](https://stack.optimism.io/)
+- [op-challenger](https://github.com/clabby/op-challenger): a rust challenge agent 🦀
+- [optimism](https://github.com/ethereum-optimism/optimism): the optimism monorepo 🚀
+- [op-stack](https://stack.optimism.io/): the op-stack 🥳
