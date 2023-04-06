@@ -21,8 +21,8 @@ func main() {
 	app.Flags = flags.Flags
 	app.Version = Version
 	app.Name = "op-challenger"
-	app.Usage = "Multi-mode Challenger Agent"
-	app.Description = "A multi-mode op-stack challenge agent for output dispute games written in golang."
+	app.Usage = "Modular Challenger Agent"
+	app.Description = "A modular op-stack challenge agent for output dispute games written in golang."
 
 	app.Action = func(ctx *cli.Context) error {
 		return challenger.Main(Version, ctx)
